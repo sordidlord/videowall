@@ -1,0 +1,1440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Video Wall</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .video-grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transition: opacity 0.3s ease;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 2px;
+        }
+
+        .video-grid.inactive {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .video-grid.active {
+            opacity: 1;
+            z-index: 2;
+        }
+
+        /* Update the video cell styles */
+        .video-cell {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            pointer-events: none !important;
+        }
+
+        /* Block all interaction layer */
+        .video-cell::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 99999;
+            background: transparent;
+            pointer-events: none;
+        }
+
+        .video-cell iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            pointer-events: none !important;
+            user-select: none !important;
+            -webkit-user-select: none !important;
+        }
+
+        /* Hide all info cards and overlays */
+        [class*="ytp-"], 
+        [class*="yt-"], 
+        .html5-video-player *,
+        .ytp-pause-overlay,
+        .ytp-cards-teaser,
+        .ytp-cards-button,
+        .ytp-cards,
+        .ytp-title,
+        .annotation,
+        .video-annotations,
+        .ytp-cards-teaser-text,
+        .ytp-ce-video,
+        .ytp-ce-playlist,
+        .ytp-ce-element,
+        .ytp-gradient-top,
+        .ytp-gradient-bottom,
+        .ytp-style-scope,
+        .ytp-show-cards-title,
+        .ytp-endscreen-content,
+        .ytp-videowall-still,
+        .ytp-pause-overlay-container,
+        .ytp-player-content,
+        .ytp-info-panel,
+        .ytp-drawer,
+        .ytp-info-menu-item,
+        .branding-img,
+        .branding-img-container,
+        .ytp-next-button,
+        .ytp-prev-button,
+        .ytp-miniplayer-button,
+        .ytp-chrome-top-buttons,
+        .ytp-button {
+            display: none !important;
+            opacity: 0 !important;
+            visibility: hidden !important;
+            width: 0 !important;
+            height: 0 !important;
+            position: absolute !important;
+            top: -9999px !important;
+            left: -9999px !important;
+            pointer-events: none !important;
+        }
+
+        /* Target iframe contents */
+        .video-cell iframe * {
+            pointer-events: none !important;
+        }
+
+        /* Control Trigger Icon */
+        .control-trigger {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .control-trigger:hover {
+            background: rgba(0, 0, 0, 0.6);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .control-trigger::before {
+            content: "⚙️";
+            font-size: 20px;
+        }
+
+        /* Control Panel Styles */
+        .control-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(5px);
+            z-index: 999;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            padding: 20px;
+            color: white;
+        }
+
+        .control-panel.visible {
+            display: block;
+            opacity: 1;
+        }
+
+        .grid-editor {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .video-input {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 10px;
+            border-radius: 4px;
+            color: white;
+        }
+
+        .video-input input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 5px;
+            color: white;
+            margin-top: 5px;
+        }
+
+        .control-buttons {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .control-button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .control-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .control-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Add this to your CSS section */
+        @keyframes crossfade {
+            0% { opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        .video-grid.inactive {
+            animation: crossfade 0.3s ease forwards;
+        }
+
+        .video-grid.active {
+            animation: none;
+        }
+
+        /* Transport controls styles */
+        .transport-controls {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .tempo-controls {
+            display: flex;
+            gap: 15px;
+        }
+
+        .tempo-controls input[type="number"],
+        .tempo-controls select {
+            width: 60px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 5px;
+        }
+
+        .counter {
+            font-family: monospace;
+            font-size: 1.2em;
+            display: flex;
+            gap: 15px;
+        }
+
+        /* Global controls styles */
+        .global-controls {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .global-settings {
+            margin-top: 15px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .grid-editor {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .video-cell-editor {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 4px;
+        }
+
+        .video-cell-editor input[type="text"] {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .video-cell-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .volume-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            flex: 1;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+            outline: none;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #4CAF50;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        /* Remove these CSS rules */
+        .grid-editor,
+        .video-cell-editor,
+        .video-input,
+        .preset-controls,
+        #videoDurationSlider,
+        .global-settings {
+            display: none;
+        }
+
+        /* Add to your style section */
+        .video-controls-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            padding: 20px;
+        }
+
+        .video-cell-controls {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 4px;
+            color: white;
+        }
+
+        .time-control {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .time-slider {
+            -webkit-appearance: none;
+            appearance: none;        /* Add standard property */
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+            outline: none;
+        }
+
+        .time-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            background: white;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .time-display {
+            font-family: monospace;
+            font-size: 0.9em;
+            text-align: right;
+        }
+
+        .loop-control {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-top: 10px;
+        }
+
+        .loop-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+            outline: none;
+        }
+
+        .loop-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #FFB74D;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .loop-display {
+            font-family: monospace;
+            font-size: 0.9em;
+            text-align: right;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .loop-display.warning {
+            color: #ff4444;
+        }
+
+        .warning {
+            color: red;
+        }
+
+        .audio-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .mute-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            min-width: 60px;
+        }
+
+        .mute-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .range-container {
+            position: relative;
+            height: 60px;
+            padding: 20px 12px;
+            margin-bottom: 10px;
+        }
+
+        .slider-track {
+            position: absolute;
+            top: 50%;
+            height: 4px;
+            width: calc(100% - 24px);
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+            transform: translateY(-50%);
+        }
+
+        .slider-range {
+            position: absolute;
+            top: 50%;
+            height: 4px;
+            background: #4CAF50;
+            border-radius: 2px;
+            transform: translateY(-50%);
+            cursor: grab;
+        }
+
+        .slider-range:active {
+            cursor: grabbing;
+        }
+
+        .range-input {
+            position: relative;
+            height: 0;
+        }
+
+        .range-handle {
+            position: absolute;
+            top: 50%;
+            width: 12px;
+            height: 12px;
+            background: white;
+            border: 2px solid #4CAF50;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: ew-resize;
+            z-index: 2;
+        }
+
+        .range-handle.start {
+            left: 0;
+        }
+
+        .range-handle.end {
+            right: 0;
+            transform: translate(50%, -50%);
+        }
+
+        .range-time {
+            position: absolute;
+            font-family: monospace;
+            font-size: 0.8em;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .range-time.start {
+            left: 0;
+            bottom: 0;
+        }
+
+        .range-time.end {
+            right: 0;
+            bottom: 0;
+        }
+
+        .range-duration {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            top: 0;
+            font-family: monospace;
+            font-size: 0.9em;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .loop-slider.warning {
+            background: rgba(255, 0, 0, 0.3);
+        }
+
+        .loop-slider.warning::-webkit-slider-thumb {
+            border-color: #ff4444;
+        }
+
+        .url-input-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .video-url-input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 8px;
+            color: white;
+            border-radius: 4px;
+        }
+
+        .load-url-btn {
+            padding: 8px 12px;
+            white-space: nowrap;
+        }
+    </style>
+    <!-- <script src="config.js"></script> -->
+</head>
+<body>
+    <div class="video-container">
+        <div class="video-grid active" id="videoGrid1"></div>
+    </div>
+
+    <div class="control-trigger" id="controlTrigger"></div>
+    <div class="control-panel" id="controlPanel">
+        <!-- Global Controls -->
+        <div class="global-controls">
+            <div class="transport-controls">
+                <button class="control-button" id="playPauseBtn" disabled>Loading...</button>
+                <button class="control-button" id="globalMuteBtn">Mute All</button>
+            </div>
+        </div>
+
+        <!-- Add this inside the control-panel div, after the global-controls -->
+        <div class="video-controls-grid">
+            <!-- This will be populated with JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        // Core variables
+        const FALLBACK_VIDEOS = [
+            'dQw4w9WgXcQ', // Never Gonna Give You Up
+            'btPJPFnesV4', // Eye of the Tiger
+            '9bZkp7q19f0', // Gangnam Style
+            'OPf0YbXqDm0', // Uptown Funk
+            'JGwWNGJdvx8', // Shape of You
+            'kJQP7kiw5Fk', // Despacito
+            'fJ9rUzIMcZQ', // Bohemian Rhapsody
+            '2vjPBrBU-TM', // Chandelier
+            'y6120QOlsfU'  // Darude - Sandstorm
+        ];
+
+        // Update the state variables - remove timing-related vars
+        const DEFAULT_BPM = 120; // Keep for speed reference only
+        const GRID_SIZE = 9;
+        let players = [];
+        let playersReady = 0;
+        let isPlaying = false;
+        let videoStartTimes = Array(GRID_SIZE).fill(0);
+        let videoDurations = Array(GRID_SIZE).fill(0);
+        let videoLoopLengths = Array(GRID_SIZE).fill(2); // Default 2 second loops
+        let videoMuted = Array(GRID_SIZE).fill(true); // All videos start muted
+        let videoVolumes = Array(GRID_SIZE).fill(100);
+        let previousMuteStates = Array(GRID_SIZE).fill(false);
+        let globalMuted = false;
+
+        // Load YouTube IFrame API
+        const tag = document.createElement('script');
+        tag.src = 'https://www.youtube.com/iframe_api';
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        // Main grid creation function
+        function createVideoGrid(videoIds) {
+            const grid = document.getElementById('videoGrid1');
+            grid.innerHTML = '';
+            players = [];
+            playersReady = 0;
+
+            videoIds.forEach((videoId, index) => {
+                const cell = document.createElement('div');
+                cell.className = 'video-cell';
+                cell.id = `player_${index}`;
+                grid.appendChild(cell);
+
+                players[index] = new YT.Player(cell.id, {
+                    videoId: videoId,
+                    playerVars: {
+                        autoplay: 0,
+                        controls: 0,
+                        mute: 1,
+                        loop: 1,
+                        playlist: videoId,
+                        playsinline: 1,
+                        modestbranding: 1,
+                        rel: 0,
+                        showinfo: 0,
+                        fs: 0,
+                        iv_load_policy: 3,
+                        disablekb: 1,
+                        enablejsapi: 1
+                    },
+                    events: {
+                        onReady: (event) => {
+                            console.log(`Player ${index} ready`);
+                            event.target.pauseVideo();
+                            event.target.mute();
+                            
+                            videoDurations[index] = event.target.getDuration();
+                            
+                            playersReady++;
+                            if (playersReady === GRID_SIZE) {
+                                console.log('All players ready');
+                                document.getElementById('playPauseBtn').disabled = false;
+                                document.getElementById('playPauseBtn').textContent = 'Play';
+                                createVideoControls(); // Create controls after players are ready
+                            }
+                        }
+                    }
+                });
+            });
+        }
+
+        // Simple start function
+        function startAllVideos() {
+            console.log('Starting all videos...');
+            players.forEach(player => {
+                try {
+                    player.playVideo();
+                } catch (e) {
+                    console.error('Error starting player:', e);
+                }
+            });
+        }
+
+        // Add metronome functions
+        function initMetronome() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            nextTickTime = audioContext.currentTime;
+        }
+
+        const LOOP_BUFFER = 0.1;  // Buffer time before loop point in seconds
+        const CROSSFADE_DURATION = 0.05;  // Crossfade duration in seconds
+
+        // Update the scheduleNextTick function
+        function scheduleNextTick() {
+            if (document.hidden) return;
+            
+            const secondsPerBeat = 60.0 / bpm;
+            
+            while (nextTickTime < audioContext.currentTime + 0.1) {
+                // Metronome click
+                const click = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                click.connect(gain);
+                gain.connect(audioContext.destination);
+                gain.gain.value = isMetronomeMuted ? 0 : metronomeVolume;
+                click.frequency.value = currentBeat === 0 ? 1000 : 800;
+                click.start(nextTickTime);
+                click.stop(nextTickTime + 0.05);
+                
+                // Update beat/bar counters
+                currentBeat = (currentBeat + 1) % timeSignature;
+                if (currentBeat === 0) currentBar++;
+                
+                // Check each video for loop points
+                players.forEach((player, index) => {
+                    const multiplier = videoLoopMultipliers[index];
+                    const beatsPerLoop = timeSignature * multiplier;
+                    const totalBeats = (currentBar * timeSignature) + currentBeat;
+                    
+                    if (multiplier >= 1) {
+                        // For multipliers: loop every N bars
+                        const barsPerLoop = Math.ceil(multiplier);
+                        if (currentBeat === 0 && currentBar % barsPerLoop === 0) {
+                            player.seekTo(videoStartTimes[index], true);
+                        }
+                    } else {
+                        // For divisions: loop multiple times per bar
+                        const totalBeatsPerLoop = timeSignature * multiplier;
+                        if (totalBeats % totalBeatsPerLoop === 0) {
+                            player.seekTo(videoStartTimes[index], true);
+                        }
+                    }
+                });
+                
+                // Update display
+                document.getElementById('barCounter').textContent = `Bar: ${currentBar + 1}`;
+                document.getElementById('beatCounter').textContent = `Beat: ${currentBeat + 1}`;
+                
+                nextTickTime += secondsPerBeat;
+            }
+            
+            if (isPlaying) {
+                requestAnimationFrame(scheduleNextTick);
+            }
+        }
+
+        // Initial load - YouTube API will call this
+        function onYouTubeIframeAPIReady() {
+            console.log('YouTube API Ready');
+            createVideoGrid(FALLBACK_VIDEOS);
+            initializeUrlControls(); // Add this line
+        }
+
+        // Control panel toggle
+        const controlTrigger = document.getElementById('controlTrigger');
+        const controlPanel = document.getElementById('controlPanel');
+
+        controlTrigger.addEventListener('click', () => {
+            const isVisible = controlPanel.classList.contains('visible');
+            controlPanel.classList.toggle('visible');
+        });
+
+        // Add after state variables
+        function startVideoLoops() {
+            players.forEach((player, index) => {
+                checkAndLoopVideo(player, index);
+            });
+        }
+
+        function checkAndLoopVideo(player, index) {
+            if (!isPlaying) return;
+
+            const currentTime = player.getCurrentTime();
+            const startTime = videoStartTimes[index];
+            const endTime = startTime + videoLoopLengths[index];
+            const bufferTime = 0.1; // 100ms buffer before loop point
+
+            // Check if we're approaching the end of the loop
+            if (currentTime >= endTime - bufferTime) {
+                // Prepare to loop back
+                player.seekTo(startTime, true);
+                
+                // Update visual feedback
+                const range = document.getElementById(`range_${index}`);
+                range.style.background = '#6ae'; // Flash blue briefly
+                setTimeout(() => {
+                    range.style.background = '#4CAF50';
+                }, 100);
+            }
+
+            // Check if we've somehow gone before start time
+            if (currentTime < startTime) {
+                player.seekTo(startTime, true);
+            }
+
+            // Request next check
+            requestAnimationFrame(() => checkAndLoopVideo(player, index));
+        }
+
+        // Update the play button handler
+        document.getElementById('playPauseBtn').addEventListener('click', () => {
+            isPlaying = !isPlaying;
+            const btn = document.getElementById('playPauseBtn');
+            
+            if (isPlaying) {
+                btn.textContent = 'Stop';
+                players.forEach((player, index) => {
+                    player.unMute();
+                    player.setVolume(videoVolumes[index]);
+                    videoMuted[index] = false;
+                    document.getElementById(`muteBtn_${index}`).textContent = 'Mute';
+                    player.playVideo();
+                    player.seekTo(videoStartTimes[index], true);
+                });
+                document.getElementById('globalMuteBtn').textContent = 'Mute All';
+                globalMuted = false;
+                startVideoLoops(); // Start the loop checking
+            } else {
+                btn.textContent = 'Play';
+                players.forEach(player => player.pauseVideo());
+            }
+        });
+
+        // Update the global mute button handler - add this after the play/pause button handler
+        document.getElementById('globalMuteBtn').addEventListener('click', () => {
+            globalMuted = !globalMuted;
+            const btn = document.getElementById('globalMuteBtn');
+            
+            if (globalMuted) {
+                // Mute all videos
+                players.forEach((player, index) => {
+                    previousMuteStates[index] = !videoMuted[index]; // Store current unmuted state
+                    player.mute();
+                    videoMuted[index] = true;
+                    document.getElementById(`muteBtn_${index}`).textContent = 'Unmute';
+                });
+                btn.textContent = 'Unmute All';
+            } else {
+                // Restore previous states
+                players.forEach((player, index) => {
+                    if (previousMuteStates[index]) {
+                        player.unMute();
+                        player.setVolume(videoVolumes[index]);
+                        videoMuted[index] = false;
+                        document.getElementById(`muteBtn_${index}`).textContent = 'Mute';
+                    }
+                });
+                btn.textContent = 'Mute All';
+            }
+        });
+
+        // Add tempo and time signature controls
+        document.getElementById('bpmInput').addEventListener('change', (e) => {
+            bpm = parseFloat(e.target.value);
+        });
+
+        document.getElementById('timeSignature').addEventListener('change', (e) => {
+            timeSignature = parseInt(e.target.value);
+            currentBeat = 0;
+        });
+
+        // Add this helper function
+        function unmuteAllVideos() {
+            players.forEach(player => {
+                try {
+                    player.unMute();
+                    player.setVolume(100);
+                } catch (e) {
+                    console.error('Error unmuting player:', e);
+                }
+            });
+        }
+
+        // Add this function after scheduleNextTick()
+        function handleVisibilityChange() {
+            if (document.hidden) {
+                // Tab is hidden
+                console.log('Tab hidden - pausing sync');
+                if (isPlaying) {
+                    // Store the current time
+                    lastTickTime = audioContext.currentTime;
+                    // Pause videos while hidden
+                    players.forEach(player => {
+                        player.pauseVideo();
+                    });
+                }
+            } else {
+                // Tab is visible again
+                console.log('Tab visible - resuming sync');
+                if (isPlaying) {
+                    // Calculate missed beats
+                    const timeDiff = audioContext.currentTime - lastTickTime;
+                    const beatsDiff = Math.floor((timeDiff * bpm) / 60);
+                    
+                    // Adjust counters
+                    currentBeat = (currentBeat + beatsDiff) % timeSignature;
+                    currentBar += Math.floor((currentBeat + beatsDiff) / timeSignature);
+                    
+                    // Update display
+                    document.getElementById('barCounter').textContent = `Bar: ${currentBar + 1}`;
+                    document.getElementById('beatCounter').textContent = `Beat: ${currentBeat + 1}`;
+                    
+                    // Resume playback
+                    nextTickTime = audioContext.currentTime;
+                    players.forEach(player => {
+                        player.playVideo();
+                        player.seekTo(0); // Reset to start of video
+                    });
+                }
+            }
+        }
+
+        // Add this to your initialization code
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Add the event listener for the metronome button
+        document.getElementById('metronomeBtn').addEventListener('click', () => {
+            const btn = document.getElementById('metronomeBtn');
+            isMetronomeMuted = !isMetronomeMuted;
+            btn.textContent = isMetronomeMuted ? 'Unmute Click' : 'Mute Click';
+        });
+
+        // Update the createVideoControls function
+        function createVideoControls() {
+            const grid = document.querySelector('.video-controls-grid');
+            grid.innerHTML = '';
+
+            for (let i = 0; i < GRID_SIZE; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'video-cell-controls';
+                
+                cell.innerHTML = `
+                    <div class="range-container" id="rangeContainer_${i}">
+                        <div class="slider-track"></div>
+                        <div class="slider-range" id="range_${i}">
+                            <div class="range-handle start" id="startHandle_${i}"></div>
+                            <div class="range-handle end" id="endHandle_${i}"></div>
+                        </div>
+                        <div class="range-time start" id="startTime_${i}">0:00</div>
+                        <div class="range-time end" id="endTime_${i}">0:00</div>
+                        <div class="range-duration" id="duration_${i}">Duration: 0.0s</div>
+                    </div>
+                    <div class="time-control">
+                        <input type="range" 
+                            class="time-slider" 
+                            id="startTimeSlider_${i}" 
+                            min="0" 
+                            max="${videoDurations[i]}" 
+                            step="0.1" 
+                            value="0">
+                        <span>Start Time</span>
+                    </div>
+                    <div class="loop-control">
+                        <input type="range" 
+                            class="loop-slider" 
+                            id="loopLengthSlider_${i}" 
+                            min="0.1" 
+                            max="${videoDurations[i]}" 
+                            step="0.1" 
+                            value="2">
+                        <span class="loop-display" id="loopDisplay_${i}">2.0s</span>
+                    </div>
+                    <div class="audio-control">
+                        <button class="mute-btn" id="muteBtn_${i}">Unmute</button>
+                        <input type="range" class="volume-slider" id="volumeSlider_${i}" 
+                            min="0" max="100" value="100">
+                    </div>
+                    <div class="url-input-container">
+                        <input type="text" class="video-url-input" id="videoUrl_${i}" 
+                            placeholder="Paste YouTube URL here">
+                        <button class="control-button load-url-btn" id="loadUrlBtn_${i}">Load Video</button>
+                    </div>
+                `;
+
+                grid.appendChild(cell);
+
+                // Get references to elements
+                const container = document.getElementById(`rangeContainer_${i}`);
+                const range = document.getElementById(`range_${i}`);
+                const startHandle = document.getElementById(`startHandle_${i}`);
+                const endHandle = document.getElementById(`endHandle_${i}`);
+                const startTimeSlider = document.getElementById(`startTimeSlider_${i}`);
+                const loopLengthSlider = document.getElementById(`loopLengthSlider_${i}`);
+
+                let isDragging = null;
+                let startX, startLeft, startWidth;
+
+                function updateDisplay(start, end) {
+                    const duration = end - start;
+                    document.getElementById(`startTime_${i}`).textContent = formatTime(start);
+                    document.getElementById(`endTime_${i}`).textContent = formatTime(end);
+                    document.getElementById(`duration_${i}`).textContent = `Duration: ${duration.toFixed(1)}s`;
+                    
+                    videoStartTimes[i] = start;
+                    videoLoopLengths[i] = duration;
+                    
+                    if (isPlaying) {
+                        players[i].seekTo(start, true);
+                    }
+                }
+
+                // Update the slider handlers in createVideoControls function
+                startTimeSlider.addEventListener('input', (e) => {
+                    const startTime = parseFloat(e.target.value);
+                    const currentDuration = videoLoopLengths[i];
+                    const maxEnd = Math.min(startTime + currentDuration, videoDurations[i]);
+                    
+                    // Update range slider position
+                    const containerWidth = container.offsetWidth - 24;
+                    const startPos = (startTime / videoDurations[i]) * containerWidth;
+                    const endPos = (maxEnd / videoDurations[i]) * containerWidth;
+                    
+                    range.style.left = startPos + 'px';
+                    range.style.width = (endPos - startPos) + 'px';
+                    
+                    updateDisplay(startTime, maxEnd);
+                });
+
+                loopLengthSlider.addEventListener('input', (e) => {
+                    const duration = parseFloat(e.target.value);
+                    const currentStart = videoStartTimes[i];
+                    const remainingTime = videoDurations[i] - currentStart;
+                    const maxEnd = Math.min(currentStart + duration, videoDurations[i]);
+                    
+                    // Update loop display and warning state
+                    const loopDisplay = document.getElementById(`loopDisplay_${i}`);
+                    if (duration > remainingTime) {
+                        // Only show warning if requested duration exceeds available time
+                        loopDisplay.textContent = `${remainingTime.toFixed(1)}s (limited)`;
+                        loopDisplay.classList.add('warning');
+                        loopLengthSlider.classList.add('warning');
+                        
+                        // Set the duration to maximum available
+                        videoLoopLengths[i] = remainingTime;
+                    } else {
+                        loopDisplay.textContent = `${duration.toFixed(1)}s`;
+                        loopDisplay.classList.remove('warning');
+                        loopLengthSlider.classList.remove('warning');
+                        
+                        videoLoopLengths[i] = duration;
+                    }
+                    
+                    // Update range slider position
+                    const containerWidth = container.offsetWidth - 24;
+                    const startPos = (currentStart / videoDurations[i]) * containerWidth;
+                    const endPos = (maxEnd / videoDurations[i]) * containerWidth;
+                    
+                    range.style.left = startPos + 'px';
+                    range.style.width = (endPos - startPos) + 'px';
+                    
+                    updateDisplay(currentStart, maxEnd);
+                });
+
+                // Mouse handlers for range slider
+                function handleMouseDown(e) {
+                    if (e.target === startHandle) isDragging = 'start';
+                    else if (e.target === endHandle) isDragging = 'end';
+                    else if (e.target === range) isDragging = 'range';
+                    
+                    startX = e.clientX;
+                    startLeft = range.offsetLeft;
+                    startWidth = range.offsetWidth;
+                    
+                    document.addEventListener('mousemove', handleMouseMove);
+                    document.addEventListener('mouseup', handleMouseUp);
+                }
+
+                function handleMouseMove(e) {
+                    if (!isDragging) return;
+                    
+                    const deltaX = e.clientX - startX;
+                    const containerWidth = container.offsetWidth - 24;
+                    
+                    let newStart, newEnd;
+                    
+                    if (isDragging === 'start') {
+                        // Left handle - changes start time and duration
+                        const newLeft = Math.max(0, Math.min(startLeft + deltaX, startLeft + startWidth - 20));
+                        newStart = (newLeft / containerWidth) * videoDurations[i];
+                        newEnd = ((startLeft + startWidth) / containerWidth) * videoDurations[i]; // Keep end point fixed
+                        
+                        // Update duration slider
+                        const newDuration = newEnd - newStart;
+                        loopLengthSlider.value = newDuration;
+                    } else if (isDragging === 'end') {
+                        // Right handle - changes duration only
+                        const newWidth = Math.max(20, Math.min(startWidth + deltaX, containerWidth - startLeft));
+                        newStart = (range.offsetLeft / containerWidth) * videoDurations[i];
+                        newEnd = ((range.offsetLeft + newWidth) / containerWidth) * videoDurations[i];
+                        
+                        // Update duration slider
+                        const newDuration = newEnd - newStart;
+                        loopLengthSlider.value = newDuration;
+                    } else if (isDragging === 'range') {
+                        // Middle drag - moves both handles maintaining duration
+                        const newLeft = Math.max(0, Math.min(startLeft + deltaX, containerWidth - startWidth));
+                        newStart = (newLeft / containerWidth) * videoDurations[i];
+                        newEnd = newStart + videoLoopLengths[i];
+                    }
+                    
+                    // Update the range display and video state
+                    updateDisplay(newStart, newEnd);
+                    
+                    // Update bottom sliders
+                    startTimeSlider.value = newStart;
+                    loopLengthSlider.value = newEnd - newStart;
+                    
+                    // Update loop display
+                    const loopDisplay = document.getElementById(`loopDisplay_${i}`);
+                    const duration = newEnd - newStart;
+                    const remainingTime = videoDurations[i] - newStart;
+                    
+                    if (duration > remainingTime) {
+                        loopDisplay.textContent = `${remainingTime.toFixed(1)}s (limited)`;
+                        loopDisplay.classList.add('warning');
+                        loopLengthSlider.classList.add('warning');
+                    } else {
+                        loopDisplay.textContent = `${duration.toFixed(1)}s`;
+                        loopDisplay.classList.remove('warning');
+                        loopLengthSlider.classList.remove('warning');
+                    }
+                    
+                    // Update range position
+                    range.style.left = (newStart / videoDurations[i]) * containerWidth + 'px';
+                    range.style.width = ((newEnd - newStart) / videoDurations[i]) * containerWidth + 'px';
+                }
+
+                function handleMouseUp() {
+                    isDragging = null;
+                    document.removeEventListener('mousemove', handleMouseMove);
+                    document.removeEventListener('mouseup', handleMouseUp);
+                }
+
+                range.addEventListener('mousedown', handleMouseDown);
+                startHandle.addEventListener('mousedown', handleMouseDown);
+                endHandle.addEventListener('mousedown', handleMouseDown);
+
+                // Initialize position
+                updateDisplay(0, Math.min(2, videoDurations[i]));
+
+                // Add mute button handler
+                const muteBtn = document.getElementById(`muteBtn_${i}`);
+                muteBtn.addEventListener('click', () => {
+                    videoMuted[i] = !videoMuted[i];
+                    if (videoMuted[i]) {
+                        players[i].mute();
+                        muteBtn.textContent = 'Unmute';
+                    } else {
+                        players[i].unMute();
+                        players[i].setVolume(videoVolumes[i]);
+                        muteBtn.textContent = 'Mute';
+                    }
+                });
+
+                // Add volume slider handler
+                const volumeSlider = document.getElementById(`volumeSlider_${i}`);
+                volumeSlider.addEventListener('input', (e) => {
+                    const volume = parseInt(e.target.value);
+                    videoVolumes[i] = volume;
+                    if (!videoMuted[i]) {
+                        players[i].setVolume(volume);
+                    }
+                });
+
+                // Add URL loading functionality for this cell
+                const loadUrlBtn = document.getElementById(`loadUrlBtn_${i}`);
+                const urlInput = document.getElementById(`videoUrl_${i}`);
+                
+                // Update the URL loading functionality inside createVideoControls
+                loadUrlBtn.addEventListener('click', async () => {
+                    const videoId = await extractVideoId(urlInput.value);
+                    if (!videoId) return;
+    
+                    // Store current audio settings
+                    const currentMuted = videoMuted[i];
+                    const currentVolume = videoVolumes[i];
+                    const wasPlaying = isPlaying;
+                    
+                    // Replace video in this cell
+                    if (players[i]) {
+                        players[i].destroy();
+                    }
+                    
+                    const cell = document.getElementById(`player_${i}`);
+                    cell.innerHTML = '';
+                    
+                    players[i] = new YT.Player(`player_${i}`, {
+                        videoId: videoId,
+                        playerVars: {
+                            autoplay: 0,
+                            controls: 0,
+                            mute: 1,
+                            loop: 1,
+                            playlist: videoId,
+                            playsinline: 1,
+                            modestbranding: 1,
+                            rel: 0,
+                            showinfo: 0,
+                            fs: 0,
+                            iv_load_policy: 3,
+                            disablekb: 1,
+                            enablejsapi: 1
+                        },
+                        events: {
+                            onReady: (event) => {
+                                // Reset time-based settings first
+                                videoStartTimes[i] = 0;
+                                videoDurations[i] = event.target.getDuration();
+                                videoLoopLengths[i] = Math.min(2, videoDurations[i]);
+                                
+                                // Update all sliders
+                                const startTimeSlider = document.getElementById(`startTimeSlider_${i}`);
+                                const loopLengthSlider = document.getElementById(`loopLengthSlider_${i}`);
+                                const range = document.getElementById(`range_${i}`);
+                                
+                                startTimeSlider.max = videoDurations[i];
+                                startTimeSlider.value = 0;
+                                loopLengthSlider.max = videoDurations[i];
+                                loopLengthSlider.value = videoLoopLengths[i];
+                                
+                                // Update range slider position
+                                const containerWidth = container.offsetWidth - 24;
+                                range.style.left = '0px';
+                                range.style.width = ((videoLoopLengths[i] / videoDurations[i]) * containerWidth) + 'px';
+                                
+                                // Restore audio settings
+                                videoMuted[i] = currentMuted;
+                                videoVolumes[i] = currentVolume;
+                                if (!currentMuted) {
+                                    event.target.unMute();
+                                    event.target.setVolume(currentVolume);
+                                }
+                                
+                                // Update displays
+                                updateDisplay(0, videoLoopLengths[i]);
+                                
+                                // Reset warnings
+                                const loopDisplay = document.getElementById(`loopDisplay_${i}`);
+                                loopDisplay.classList.remove('warning');
+                                loopLengthSlider.classList.remove('warning');
+                                
+                                // If we were playing, start the new video
+                                if (wasPlaying) {
+                                    event.target.playVideo();
+                                    event.target.seekTo(0, true);
+                                } else {
+                                    event.target.pauseVideo();
+                                }
+                                
+                                // Start checking loops if playing
+                                if (wasPlaying) {
+                                    checkAndLoopVideo(event.target, i);
+                                }
+                            }
+                        }
+                    });
+                });
+            }
+        }
+
+        // Update the validateLoopLength function
+        function validateLoopLength(index) {
+            const remainingDuration = videoDurations[index] - videoStartTimes[index];
+            const currentLoopLength = videoLoopLengths[index];
+            const display = document.getElementById(`loopDisplay_${index}`);
+            
+            if (currentLoopLength > remainingDuration) {
+                display.textContent = `${currentLoopLength.toFixed(1)}s (too long!)`;
+                display.classList.add('warning');
+            } else {
+                display.textContent = `${currentLoopLength.toFixed(1)}s`;
+                display.classList.remove('warning');
+            }
+        }
+
+        // Add this function to format time
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${minutes}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Add this function to update time displays
+        function updateTimeDisplay(index) {
+            const display = document.getElementById(`timeDisplay_${index}`);
+            display.textContent = `${formatTime(videoStartTimes[index])} / ${formatTime(videoDurations[index])}`;
+        }
+
+        // Add after your state variables
+        function initializeControls() {
+            // Reset BPM input
+            const bpmInput = document.getElementById('bpmInput');
+            bpmInput.value = DEFAULT_BPM;
+            bpm = DEFAULT_BPM;
+
+            // Reset time signature select
+            const timeSignatureSelect = document.getElementById('timeSignature');
+            timeSignatureSelect.value = DEFAULT_TIME_SIG;
+            timeSignature = DEFAULT_TIME_SIG;
+
+            // Reset counters
+            currentBeat = 0;
+            currentBar = 0;
+            document.getElementById('barCounter').textContent = 'Bar: 1';
+            document.getElementById('beatCounter').textContent = 'Beat: 1';
+        }
+
+        // Modify the time slider event listener to buffer new segments
+        document.querySelector('.time-slider').addEventListener('input', (e) => {
+            const index = parseInt(e.target.id.split('_')[1]);
+            videoStartTimes[index] = parseFloat(e.target.value);
+            updateTimeDisplay(index);
+            
+            // Buffer the new segment
+            bufferVideoSegment(players[index], index, videoStartTimes[index]);
+        });
+
+        // Add after your state variables
+        function initializeUrlControls() {
+            const cellSelect = document.getElementById('cellSelect');
+            for (let i = 0; i < GRID_SIZE; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = `Cell ${i + 1}`;
+                cellSelect.appendChild(option);
+            }
+
+            document.getElementById('loadUrlBtn').addEventListener('click', handleUrlLoad);
+        }
+
+        // Add this function to replace your current extractVideoId
+        async function extractVideoId(url) {
+            try {
+                // Handle different URL formats
+                const regexPatterns = [
+                    // Standard watch URLs
+                    /youtube\.com\/watch\?v=([^&]{11})/, 
+                    // Short URLs
+                    /youtu\.be\/([^?]{11})/,
+                    // Embed URLs
+                    /youtube\.com\/embed\/([^?]{11})/,
+                    // Just the ID itself (11 characters)
+                    /^([a-zA-Z0-9_-]{11})$/
+                ];
+
+                let videoId = null;
+                for (let pattern of regexPatterns) {
+                    const match = url.match(pattern);
+                    if (match) {
+                        if (url.includes('list=')) {
+                            alert('Please use single video URLs, not playlists');
+                            return null;
+                        }
+                        videoId = match[1];
+                        break;
+                    }
+                }
+
+                if (!videoId) {
+                    alert('Invalid YouTube URL. Please use a standard YouTube video URL');
+                    return null;
+                }
+
+                // Check if video allows embedding
+                const embedAllowed = await checkVideoEmbedStatus(videoId);
+                if (!embedAllowed) {
+                    alert('This video does not allow embedding');
+                    return null;
+                }
+
+                return videoId;
+            } catch (error) {
+                console.error('Error parsing URL:', error);
+                return null;
+            }
+        }
+
+        // Add this function to check if video allows embedding
+        async function checkVideoEmbedStatus(videoId) {
+            try {
+                const response = await fetch(`https://www.youtube.com/oembed?url=http://youtube.com/watch?v=${videoId}&format=json`);
+                if (response.ok) {
+                    return true; // Video exists and embedding is allowed
+                }
+                return false; // Video either doesn't exist or embedding is disabled
+            } catch (error) {
+                console.error('Error checking video embed status:', error);
+                return false;
+            }
+        }
+
+        function handleUrlLoad() {
+            const url = document.getElementById('videoUrl').value;
+            const cellIndex = parseInt(document.getElementById('cellSelect').value);
+            const videoId = extractVideoId(url);
+
+            if (!videoId) {
+                alert('Invalid YouTube URL');
+                return;
+            }
+
+            // Replace single video in grid
+            const cell = document.getElementById(`player_${cellIndex}`);
+            if (players[cellIndex]) {
+                players[cellIndex].destroy();
+            }
+            cell.innerHTML = '';
+
+            players[cellIndex] = new YT.Player(cell.id, {
+                videoId: videoId,
+                playerVars: {
+                    autoplay: 0,
+                    controls: 0,
+                    mute: 1,
+                    loop: 1,
+                    playlist: videoId,
+                    playsinline: 1,
+                    modestbranding: 1,
+                    rel: 0,
+                    showinfo: 0,
+                    fs: 0,
+                    iv_load_policy: 3,
+                    disablekb: 1,
+                    enablejsapi: 1
+                },
+                events: {
+                    onReady: (event) => {
+                        event.target.pauseVideo();
+                        event.target.mute();
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
