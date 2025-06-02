@@ -345,9 +345,81 @@
         /* Add to your style section */
         .video-controls-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 15px;
             padding: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        /* Add responsive breakpoints */
+        @media (max-width: 1200px) {
+            .video-controls-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .video-controls-grid {
+                grid-template-columns: 1fr;
+                padding: 10px;
+            }
+
+            .control-panel {
+                padding: 10px;
+            }
+
+            .global-controls {
+                padding: 10px;
+            }
+
+            .transport-controls {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .range-container {
+                height: 40px;
+            }
+
+            .control-button {
+                padding: 12px;
+                width: 100%;
+            }
+
+            .control-trigger {
+                top: 10px;
+                right: 10px;
+            }
+        }
+
+        /* Improve touch targets for mobile */
+        @media (hover: none) {
+            .range-handle {
+                width: 24px;
+                height: 24px;
+            }
+
+            .control-button,
+            .mute-btn {
+                min-height: 44px;
+            }
+
+            .control-trigger {
+                width: 50px;
+                height: 50px;
+            }
+
+            .video-url-input,
+            .volume-slider {
+                height: 44px;
+            }
+        }
+
+        /* Enable scrolling in control panel */
+        .control-panel {
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .video-cell-controls {
